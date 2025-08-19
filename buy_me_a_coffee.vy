@@ -38,6 +38,7 @@ def _get_eth_to_usd_rate():
 
 @external
 @view
-def get_price() -> uint256:
+def get_price() -> int256:
     price_feed: AggregatorV3Interface = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306)
     return staticcall price_feed.latestAnswer()
+
