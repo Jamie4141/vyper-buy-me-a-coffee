@@ -13,10 +13,14 @@ interface AggregatorV3Interface:
     def latestAnswer() -> int256: view
 
 min_USD: uint256
+price_feed: AggregatorV3Interface  #0x694AA1769357215DE4FAC081bf1f309aDC325306 sepolia
+owner: public(address)
 
 @deploy
-def __init__():
-    self.min_USD = 5
+def __init__(price_feed_address: address):
+    self.min_USD = as_wei_value(5, "ether")
+    self.price_feed = AggregatorV3Interface(price_feed_address)
+    self.owner = msg.sender
 
 @external
 @payable
@@ -25,20 +29,37 @@ def fund():
     Allows users to send $ to this contract
     Have a minimum $ amount send
     """
-    assert msg.value >= as_wei_value(1, "ether"), "You must spend more ETH"
-    # or --------------- 1 * (10 ** 18)
+    usd_value_of_eth: uint256 = self._get_eth_to_usd_rate(msg.value)
+
+    assert usd_value_of_eth >= self.min_USD, "You must spend more ETH"
+
 
 @external
 def withdraw():
-    pass
+    assert msg.sender == self.owner, "Not the contract owner!"
+    send(self.owner, self.balance)
 
 @internal
-def _get_eth_to_usd_rate():
-    pass
+@view
+def _get_eth_to_usd_rate(eth_amount: uint256) -> uint256:
+    price: int256 = staticcall self.price_feed.latestAnswer()
+
+    eth_price: uint256 = convert(price, uint256) * (10 ** 10)
+
+    eth_amount_in_usd: uint256 = (eth_amount * eth_price) // (1 * (10 ** 18))
+
+    return eth_amount_in_usd
+
 
 @external
 @view
-def get_price() -> int256:
-    price_feed: AggregatorV3Interface = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306)
-    return staticcall price_feed.latestAnswer()
+def get_eth_to_usd_rate(eth_amount: uint256) -> uint256:
+    return self._get_eth_to_usd_rate(eth_amount)
+
+
+# @external
+# @view
+# def get_price() -> int256:
+#     price_feed: AggregatorV3Interface = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306)
+#     return staticcall price_feed.latestAnswer()
 
