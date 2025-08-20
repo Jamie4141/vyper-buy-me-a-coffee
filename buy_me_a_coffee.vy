@@ -1,10 +1,10 @@
-# Get fund from users
-# Withdraw funds
-# Set a minimum value for funds (in USD)
-
 # pragma version 0.4.0
-# @license MIT
-# @author : Jamie
+'''
+@license MIT
+@title Buy Me a Coffee!
+@author Jamie
+@notice This contract is for creating a sample funding contract
+'''
 
 interface AggregatorV3Interface:
     def decimals() -> uint8: view
@@ -12,36 +12,44 @@ interface AggregatorV3Interface:
     def version() -> uint256: view
     def latestAnswer() -> int256: view
 
-min_USD: public(uint256)
-price_feed: public(AggregatorV3Interface)  #0x694AA1769357215DE4FAC081bf1f309aDC325306 sepolia
-owner: public(address)
+# Constants & Immutables
+MIN_USD: public(constant(uint256)) = as_wei_value(5, "ether")
+PRICE_FEED: public(immutable(AggregatorV3Interface))  #0x694AA1769357215DE4FAC081bf1f309aDC325306 sepolia
+OWNER: public(immutable(address))
+PRECISION: constant(uint256) = 1 * (10 ** 18)
+
+# Storage 
 funders: public(DynArray[address, 1000])
 funder_to_amount_funded: public(HashMap[address, uint256])
 
 @deploy
 def __init__(price_feed_address: address):
-    self.min_USD = as_wei_value(5, "ether")
-    self.price_feed = AggregatorV3Interface(price_feed_address)
-    self.owner = msg.sender
+    PRICE_FEED = AggregatorV3Interface(price_feed_address)
+    OWNER = msg.sender
 
 @external
 @payable
 def fund():
+    self._fund()
+
+@internal
+@payable
+def _fund():
     """
     Allows users to send $ to this contract
     Have a minimum $ amount send
     """
     usd_value_of_eth: uint256 = self._get_eth_to_usd_rate(msg.value)
-    assert usd_value_of_eth >= self.min_USD, "You must spend more ETH"
+    assert usd_value_of_eth >= MIN_USD, "You must spend more ETH"
     self.funders.append(msg.sender)
     self.funder_to_amount_funded[msg.sender] += msg.value
 
 
 @external
 def withdraw():
-    assert msg.sender == self.owner, "Not the contract owner!"
-    send(self.owner, self.balance)
-
+    assert msg.sender == OWNER, "Not the contract owner!"
+    # send(OWNER, self.balance)
+    raw_call(OWNER, b"", value = self.balance)
     # resetting 
     for funder: address in self.funders:
         self.funder_to_amount_funded[funder] = 0
@@ -52,11 +60,11 @@ def withdraw():
 @internal
 @view
 def _get_eth_to_usd_rate(eth_amount: uint256) -> uint256:
-    price: int256 = staticcall self.price_feed.latestAnswer()
+    price: int256 = staticcall PRICE_FEED.latestAnswer()
 
     eth_price: uint256 = convert(price, uint256) * (10 ** 10)
 
-    eth_amount_in_usd: uint256 = (eth_amount * eth_price) // (1 * (10 ** 18))
+    eth_amount_in_usd: uint256 = (eth_amount * eth_price) // PRECISION
 
     return eth_amount_in_usd
 
@@ -65,6 +73,12 @@ def _get_eth_to_usd_rate(eth_amount: uint256) -> uint256:
 @view
 def get_eth_to_usd_rate(eth_amount: uint256) -> uint256:
     return self._get_eth_to_usd_rate(eth_amount)
+
+@external
+@payable
+def __default__():
+    self._fund()
+
 
 
 # @external
